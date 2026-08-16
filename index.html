@@ -10458,6 +10458,7 @@ function setLang(l){curLang=l;if(cur){oC(cur);}else{goHome();}}
 
 function goHome(){
   cur=null;curF=null;curSF=null;
+  bgSetHash('');
   document.getElementById('detail').style.display='none';
   document.getElementById('detail').classList.remove('on');
   document.getElementById('home').style.display='block';
@@ -10571,18 +10572,29 @@ function rH(keys){
 }
 
 function gS(){
-  var q=document.getElementById('q').value.trim().toLowerCase();
-  if(cur)return;
-  if(!q){rH(Object.keys(D));return;}
-  rH(Object.keys(D).filter(function(k){
+  var box=document.getElementById('q');
+  var raw=box.value;
+  if(cur){goHome();box.value=raw;}
+  var q=raw.trim().toLowerCase();
+  var home=document.getElementById('home');
+  if(!q){home.classList.remove('filtering');rH(Object.keys(D));return;}
+  var res=Object.keys(D).filter(function(k){
     var c=D[k];
     var hay=(k+' '+c.co+' '+c.rgn+' '+c.items.map(function(i){return i.n}).join(' ')).toLowerCase();
     return q.split(/\s+/).some(function(w){return hay.indexOf(w)!==-1;});
-  }));
+  });
+  home.classList.add('filtering');
+  rH(res);
+  var bar=document.createElement('div');
+  bar.className='sres';
+  bar.textContent=res.length+' '+L('results');
+  home.insertBefore(bar,home.firstChild);
+  window.scrollTo(0,0);
 }
 
 function oC(k){
   cur=k;curF=null;curSF=null;
+  bgSetHash(bgHashFor(k));
   document.getElementById('home').style.display='none';
   var el=document.getElementById('detail');el.style.display='block';el.classList.add('on');
   var c=D[k];
@@ -10594,7 +10606,7 @@ function oC(k){
     else if((DESC_I18N[k]||{})[curLang]){h+='<div class="desc">'+(DESC_I18N[k]||{})[curLang]+'</div>';}
   }
   h+='<div class="lnk"><a href="'+GM+encodeURIComponent(k+' Bulgaria')+'" target="_blank" rel="noopener" onclick="window.open(this.href,\'_blank\');return false;">📍 Google Maps</a>';
-  h+='<a href="https://www.tripadvisor.com/Search?q='+encodeURIComponent(k+' Bulgaria')+'" target="_blank" rel="noopener" onclick="window.open(this.href,\'_blank\');return false;">⭐ TripAdvisor</a></div></div>';
+  h+='<a href="https://www.tripadvisor.com/Search?q='+encodeURIComponent(k+' Bulgaria')+'" target="_blank" rel="noopener" onclick="window.open(this.href,\'_blank\');return false;">⭐ TripAdvisor</a>'+'<a href="#" onclick="bgShare(\''+k.replace(/'/g,"\\'")+'\');return false;">🔗 '+(curLang==='bg'?'Сподели':'Share')+'</a></div></div>';
 
   // Catbar
   var tc={};c.items.forEach(function(i){tc[i.y]=(tc[i.y]||0)+1});
@@ -10670,7 +10682,48 @@ function cS(){
   el.innerHTML=h;
 }
 
-(function init(){try{goHome();}catch(e){setTimeout(init,50);}})();
+
+/* ═══ BGR-PATCH-DEEPLINK-v1 ═══ */
+function bgHashFor(k){
+  return '#/'+encodeURIComponent(k)+(curLang!=='bg'?'|'+curLang:'');
+}
+function bgSetHash(h){
+  try{ if(location.hash!==h) history.replaceState(null,'',h||location.pathname+location.search); }
+  catch(e){ location.hash=h; }
+}
+function bgRoute(){
+  var raw=(location.hash||'').replace(/^#\/?/,'');
+  if(!raw) return false;
+  var parts=raw.split('|');
+  var city;
+  try{ city=decodeURIComponent(parts[0]); }catch(e){ city=parts[0]; }
+  var lg=parts[1];
+  if(lg&&LANG[lg]) curLang=lg;
+  if(city&&D[city]){ oC(city); return true; }
+  return false;
+}
+function bgToast(msg){
+  var t=document.getElementById('bgToast');
+  if(!t){ t=document.createElement('div'); t.id='bgToast'; document.body.appendChild(t); }
+  t.textContent=msg; t.classList.add('on');
+  clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('on'); },2200);
+}
+function bgShare(k){
+  var url=location.origin+location.pathname+location.search+bgHashFor(k);
+  var title=(curLang==='bg'?k:((D[k]&&D[k].co)||k))+' — BulgariaGuide';
+  var done=function(){ bgToast(curLang==='bg'?'Линкът е копиран':'Link copied'); };
+  if(navigator.share){ navigator.share({title:title,url:url}).catch(function(){}); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done,function(){ window.prompt('URL',url); }); return;
+  }
+  window.prompt('URL',url);
+}
+
+(function init(){try{
+  window.addEventListener('hashchange',function(){ if(!bgRoute()) goHome(); });
+  if(!bgRoute()) goHome();
+}catch(e){setTimeout(init,50);}})();
+
 </script>
 
 <div id="bgMap" style="display:none;position:fixed;inset:0;z-index:9000;background:#0C0805;flex-direction:column">
@@ -10704,6 +10757,18 @@ body.lt .sect-dest .sect-h{color:#c0392b!important}
 body.lt .sect-mon .sect-h{color:#5d4037!important}
 body.lt .sect-trail .sect-h{color:#2e7d32!important}
 body.lt .sect-beach .sect-h{color:#1565C0!important}
+
+/* ═══ BGR-PATCH-DEEPLINK-v1 ═══ */
+#bgToast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+background:#1c1c1e;color:#fff;padding:10px 18px;border-radius:22px;font:600 12.5px var(--fn,sans-serif);
+opacity:0;pointer-events:none;transition:.22s;z-index:9999;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+#bgToast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ═══ BGR-PATCH-SEARCH-v1 ═══ */
+#home.filtering .sect{display:none}
+#home.filtering .hero{display:none}
+.sres{max-width:900px;margin:10px auto 2px;padding:8px 14px;font:600 12px var(--mn,monospace);
+color:var(--ac,#e8a33d);letter-spacing:.4px;text-transform:uppercase}
 </style>
 </body>
 </html>
